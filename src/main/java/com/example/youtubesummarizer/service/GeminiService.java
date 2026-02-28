@@ -116,8 +116,11 @@ public class GeminiService {
             response = restTemplate.exchange(url, HttpMethod.POST, entity, String.class);
         } catch (ResourceAccessException e) {
             throw new ServiceUnavailableException("AI 服務逾時");
+        } catch (org.springframework.web.client.HttpClientErrorException e) {
+            log.error("Gemini API HTTP {} 錯誤，body={}", e.getStatusCode(), e.getResponseBodyAsString());
+            throw new ServiceUnavailableException("AI 服務暫時無法使用");
         } catch (Exception e) {
-            log.error("Gemini API 呼叫失敗", e);
+            log.error("Gemini API 呼叫失敗: {}", e.getMessage(), e);
             throw new ServiceUnavailableException("AI 服務暫時無法使用");
         }
 

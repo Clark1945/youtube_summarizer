@@ -8,7 +8,9 @@ server:
 app:
   gemini:
     api-key: ${GEMINI_API_KEY:}
-    model: gemini-1.5-flash
+    model: gemini-2.5-flash
+  transcript-service:
+    url: ${TRANSCRIPT_SERVICE_URL:http://localhost:5001}
 
 logging:
   level:
