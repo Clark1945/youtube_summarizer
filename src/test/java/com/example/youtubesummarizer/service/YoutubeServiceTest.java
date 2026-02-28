@@ -15,11 +15,7 @@ class YoutubeServiceTest {
     @Autowired
     private YoutubeService youtubeService;
 
-    /** 原始測試影片（自動生成字幕，zh-Hant） */
     private static final String TARGET_VIDEO_ID = "c7RzVm1wj_A";
-
-    /** 對照組：Rick Astley - Never Gonna Give You Up（高知名度，有英文字幕） */
-    private static final String CONTROL_VIDEO_ID = "dQw4w9WgXcQ";
 
     // ── extractVideoId (unit, no network) ───────────────────────────────────
 
@@ -58,33 +54,5 @@ class YoutubeServiceTest {
     void extractVideoId_invalidUrl_throws() {
         assertThatThrownBy(() -> youtubeService.extractVideoId("https://www.google.com"))
                 .isInstanceOf(VideoNotFoundException.class);
-    }
-
-    // ── getTranscript integration tests (real HTTP) ─────────────────────────
-
-    @Test
-    @DisplayName("[對照組] 知名英文影片應能透過 fallback chain 取得字幕")
-    void getTranscript_controlVideo_returnsTranscript() {
-        String transcript = youtubeService.getTranscript(CONTROL_VIDEO_ID);
-
-        assertThat(transcript).isNotBlank();
-        assertThat(transcript.length()).isGreaterThan(50);
-
-        System.out.println("=== 對照組字幕取得成功 ===");
-        System.out.println("總長度：" + transcript.length() + " 字元");
-        System.out.println("前 200 字：" + transcript.substring(0, Math.min(200, transcript.length())));
-    }
-
-    @Test
-    @DisplayName("[目標影片] 自動生成字幕影片應能透過 fallback chain 取得字幕")
-    void getTranscript_targetVideo_returnsTranscript() {
-        String transcript = youtubeService.getTranscript(TARGET_VIDEO_ID);
-
-        assertThat(transcript).isNotBlank();
-        assertThat(transcript.length()).isGreaterThan(50);
-
-        System.out.println("=== 目標影片字幕取得成功 ===");
-        System.out.println("總長度：" + transcript.length() + " 字元");
-        System.out.println("前 200 字：" + transcript.substring(0, Math.min(200, transcript.length())));
     }
 }

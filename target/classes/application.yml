@@ -6,9 +6,8 @@ server:
   port: 8080
 
 app:
-  gemini:
-    api-key: ${GEMINI_API_KEY:AIzaSyAl0s2VAUckiWrrFUULO1Y42l4OWuixy0A}
-    model: gemini-1.5-flash
+  media-service:
+    url: ${MEDIA_SERVICE_URL:http://localhost:5001}
 
 logging:
   level:
