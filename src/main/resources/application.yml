@@ -2,10 +2,9 @@ spring:
   application:
     name: youtube-summarizer
 
-server:
-  port: 8080
-
 app:
+  cors:
+    allowed-origin: ${ALLOWED_ORIGIN:*}
   media-service:
     url: ${MEDIA_SERVICE_URL:http://localhost:5001}
 
