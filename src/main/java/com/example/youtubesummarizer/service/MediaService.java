@@ -1,11 +1,15 @@
 package com.example.youtubesummarizer.service;
 
+import com.example.youtubesummarizer.config.CacheConfig;
 import com.example.youtubesummarizer.exception.NoSubtitlesException;
 import com.example.youtubesummarizer.exception.ServiceUnavailableException;
 import com.example.youtubesummarizer.exception.VideoNotFoundException;
 import com.fasterxml.jackson.databind.JsonNode;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.HttpClientErrorException;
@@ -21,6 +25,14 @@ public class MediaService {
 
     private final RestTemplate restTemplate;
 
+    /**
+     * Self-injection（@Lazy）讓 getSummary 內部呼叫 getTranscript 時
+     * 也能走 Spring AOP proxy，確保 @Cacheable 正常運作。
+     */
+    @Autowired
+    @Lazy
+    private MediaService self;
+
     @Value("${app.media-service.url:http://localhost:5001}")
     private String mediaServiceUrl;
 
@@ -28,14 +40,25 @@ public class MediaService {
         this.restTemplate = restTemplate;
     }
 
+    // ── 對外入口 ──────────────────────────────────────────────────────────────
+
+    /**
+     * 完整流程：取字幕 → 生成摘要。
+     * 結果以 "videoId:language" 為 key 快取 1hr。
+     */
+    @Cacheable(value = CacheConfig.SUMMARIES, key = "#videoId + ':' + #language")
     public String getSummary(String videoId, String language) {
-        String transcript = fetchTranscript(videoId);
-        return fetchSummary(transcript, language);
+        String transcript = self.getTranscript(videoId);   // 透過 proxy → transcript cache
+        return callSummarize(transcript, language);
     }
 
-    // ── Step 1: GET /transcript ───────────────────────────────────────────────
+    // ── Step 1: GET /transcript（有 cache）────────────────────────────────────
 
-    private String fetchTranscript(String videoId) {
+    /**
+     * 抓取字幕並快取，相同 videoId 1hr 內不重複呼叫 Python。
+     */
+    @Cacheable(value = CacheConfig.TRANSCRIPTS, key = "#videoId")
+    public String getTranscript(String videoId) {
         String url = mediaServiceUrl + "/transcript?videoId=" + videoId;
         log.info("Calling Python /transcript videoId={}", videoId);
 
@@ -66,9 +89,9 @@ public class MediaService {
         }
     }
 
-    // ── Step 2: POST /summarize ───────────────────────────────────────────────
+    // ── Step 2: POST /summarize（無 cache，由 getSummary 層統一 cache）────────
 
-    private String fetchSummary(String transcript, String language) {
+    private String callSummarize(String transcript, String language) {
         String url = mediaServiceUrl + "/summarize";
         log.info("Calling Python /summarize language={}, transcript_length={}", language, transcript.length());
 
@@ -78,7 +101,8 @@ public class MediaService {
         HttpEntity<Map<String, String>> entity = new HttpEntity<>(body, headers);
 
         try {
-            ResponseEntity<JsonNode> response = restTemplate.exchange(url, HttpMethod.POST, entity, JsonNode.class);
+            ResponseEntity<JsonNode> response =
+                    restTemplate.exchange(url, HttpMethod.POST, entity, JsonNode.class);
 
             JsonNode responseBody = response.getBody();
             if (responseBody == null) throw new ServiceUnavailableException("Python /summarize 回應為空");

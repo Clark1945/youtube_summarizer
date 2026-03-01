@@ -27,7 +27,7 @@ media-service 是無狀態的 Flask 服務，負責字幕抓取與 Gemini 呼叫
 | 層級 | 技術 |
 |------|------|
 | 前端 | Thymeleaf（SSR）、Vanilla JS |
-| BFF | Java 17、Spring Boot 3.2.3 |
+| BFF | Java 17、Spring Boot 3.2.3、Caffeine Cache |
 | media-service | Python 3、Flask、youtube-transcript-api、google-genai |
 | AI | Google Gemini 2.5 Flash |
 
@@ -211,6 +211,7 @@ youtube-summarizer/
 │   │   └── MediaService.java        # 呼叫 Python /transcript + /summarize
 │   ├── config/
 │   │   ├── AppConfig.java           # RestTemplate Bean
+│   │   ├── CacheConfig.java         # Caffeine 快取設定（transcripts / summaries）
 │   │   └── CorsConfig.java          # CORS 設定
 │   ├── model/
 │   │   ├── SummaryRequest.java      # { url }
@@ -224,6 +225,22 @@ youtube-summarizer/
 │   └── templates/index.html         # Thymeleaf 前端頁面
 └── pom.xml
 ```
+
+---
+
+## 快取機制
+
+Spring Boot 使用 **Caffeine Cache** 對 Python 的回傳內容做兩層快取，避免重複呼叫：
+
+| 快取名稱 | Cache Key | 快取內容 | TTL | 最大筆數 |
+|----------|-----------|---------|-----|---------|
+| `transcripts` | `videoId` | Python `/transcript` 回傳的字幕文字 | 1 小時 | 500 |
+| `summaries` | `videoId:language` | Python `/summarize` 回傳的摘要 | 1 小時 | 500 |
+
+**快取命中邏輯：**
+- 相同 `videoId` 再次請求 → 直接從 `transcripts` 拿字幕，**不呼叫** Python `/transcript`
+- 相同 `videoId` + `language` 再次請求 → 直接從 `summaries` 拿摘要，**不呼叫** Python 任何端點
+- 錯誤（exception）不會被快取，確保暫時性錯誤可以重試
 
 ---
 
