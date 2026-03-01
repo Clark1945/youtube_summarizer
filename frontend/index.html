@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>YouTube 影片總結</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #0f0f0f;
+      color: #e8e8e8;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    .card {
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 16px;
+      padding: 40px;
+      width: 100%;
+      max-width: 680px;
+    }
+
+    h1 {
+      font-size: 1.5rem;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .subtitle {
+      color: #888;
+      font-size: 0.9rem;
+      margin-bottom: 28px;
+    }
+
+    .input-row {
+      display: flex;
+      gap: 10px;
+    }
+
+    input[type="text"] {
+      flex: 1;
+      padding: 12px 16px;
+      background: #111;
+      border: 1px solid #333;
+      border-radius: 10px;
+      color: #e8e8e8;
+      font-size: 0.95rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    input[type="text"]:focus { border-color: #555; }
+    input[type="text"]::placeholder { color: #555; }
+
+    button {
+      padding: 12px 22px;
+      background: #e8e8e8;
+      color: #0f0f0f;
+      border: none;
+      border-radius: 10px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.2s;
+    }
+
+    button:hover:not(:disabled) { background: #fff; }
+    button:disabled { background: #444; color: #666; cursor: not-allowed; }
+
+    .result {
+      margin-top: 28px;
+      display: none;
+    }
+
+    .result-label {
+      font-size: 0.8rem;
+      color: #666;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 10px;
+    }
+
+    .result-box {
+      background: #111;
+      border: 1px solid #2a2a2a;
+      border-radius: 10px;
+      padding: 20px;
+      font-size: 0.95rem;
+      line-height: 1.75;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .result-box.error {
+      border-color: #5a2020;
+      color: #ff6b6b;
+      background: #1a1010;
+    }
+
+    .spinner {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid #555;
+      border-top-color: #e8e8e8;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      vertical-align: middle;
+      margin-right: 8px;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>YouTube 影片總結</h1>
+    <p class="subtitle">貼上影片網址，AI 幫你整理重點</p>
+
+    <div class="input-row">
+      <input
+        id="urlInput"
+        type="text"
+        placeholder="https://www.youtube.com/watch?v=..."
+        autocomplete="off"
+      />
+      <button id="submitBtn" onclick="summarize()">總結</button>
+    </div>
+
+    <div class="result" id="result">
+      <div class="result-label" id="resultLabel">總結結果</div>
+      <div class="result-box" id="resultBox"></div>
+    </div>
+  </div>
+
+  <script>
+    // ← 部署後填入 Python Lambda 的 API Gateway URL
+    const API_URL = "https://thtm9dnrjh.execute-api.ap-northeast-1.amazonaws.com/Prod/process";
+
+    const LANGUAGE_MAP = {
+      "zh-tw": "Traditional Chinese (繁體中文)",
+      "zh-hk": "Traditional Chinese (繁體中文)",
+      "zh-cn": "Simplified Chinese (简体中文)",
+      "zh":    "Chinese (中文)",
+      "en":    "English", "en-us": "English", "en-gb": "English",
+      "ja":    "Japanese (日本語)",
+      "ko":    "Korean (한국어)",
+      "es":    "Spanish (Español)",
+      "fr":    "French (Français)",
+      "de":    "German (Deutsch)",
+      "pt":    "Portuguese (Português)",
+      "it":    "Italian (Italiano)",
+    };
+
+    function extractVideoId(url) {
+      const m = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/);
+      if (m) return m[1];
+      if (/^[a-zA-Z0-9_-]{11}$/.test(url)) return url;
+      return null;
+    }
+
+    function resolveLanguage(lang) {
+      const primary = (lang || navigator.language || "en").split(/[,;]/)[0].trim().toLowerCase();
+      if (LANGUAGE_MAP[primary]) return LANGUAGE_MAP[primary];
+      const prefix = primary.split("-")[0];
+      return LANGUAGE_MAP[prefix] || "English";
+    }
+
+    const urlInput   = document.getElementById("urlInput");
+    const submitBtn  = document.getElementById("submitBtn");
+    const result     = document.getElementById("result");
+    const resultBox  = document.getElementById("resultBox");
+    const resultLabel = document.getElementById("resultLabel");
+
+    urlInput.addEventListener("keydown", e => { if (e.key === "Enter") summarize(); });
+
+    async function summarize() {
+      const url = urlInput.value.trim();
+      if (!url) return;
+
+      const videoId = extractVideoId(url);
+      if (!videoId) { showResult("無效的 YouTube 網址，請確認後再試", true); return; }
+
+      const language = resolveLanguage(navigator.language);
+
+      setLoading(true);
+      result.style.display = "none";
+
+      try {
+        const res = await fetch(API_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ videoId, language })
+        });
+
+        const data = await res.json();
+
+        if (data.summary) {
+          showResult(data.summary, false);
+        } else {
+          showResult(data.error || "發生未知錯誤", true);
+        }
+      } catch (err) {
+        showResult("無法連接伺服器，請稍後再試", true);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    function setLoading(loading) {
+      submitBtn.disabled = loading;
+      submitBtn.innerHTML = loading ? '<span class="spinner"></span>處理中' : "總結";
+    }
+
+    function showResult(text, isError) {
+      resultLabel.textContent = isError ? "錯誤" : "總結結果";
+      resultBox.textContent = text;
+      resultBox.className = "result-box" + (isError ? " error" : "");
+      result.style.display = "block";
+    }
+  </script>
+</body>
+</html>

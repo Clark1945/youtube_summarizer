@@ -1,0 +1,7 @@
+{
+  "httpMethod": "POST",
+  "path": "/api/summarize",
+  "headers": { "Content-Type": "application/json", "Accept-Language": "zh-TW" },
+  "body": "{\"url\": \"https://www.youtube.com/watch?v=dQw4w9WgXcQ\"}",
+  "isBase64Encoded": false
+}

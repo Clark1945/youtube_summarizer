@@ -1,0 +1,4 @@
+flask>=2.3.0
+youtube-transcript-api>=0.6.0
+google-genai>=1.0.0
+# serverless-wsgi  # Lambda 部署才需要，本機測試不需要安裝

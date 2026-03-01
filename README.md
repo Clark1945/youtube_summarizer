@@ -6,18 +6,19 @@
 
 ```
 Browser
+  │  GET  /                          → Thymeleaf 頁面（index.html）
   │  POST /api/summarize { url }
   ▼
-Spring Boot :8080  (BFF + 快取層)
-  │  GET  /transcript?videoId=   ←── 取字幕
-  │  POST /summarize { transcript, language }  ←── 生成摘要
+Spring Boot :8080
+  │  Step 1：GET  /transcript?videoId=xxx   ← 取字幕
+  │  Step 2：POST /summarize { transcript, language }  ← 生成摘要
   ▼
-media-service :5001  (Flask + Gemini)
+media-service :5001  (Python Flask)
   └── YouTube Transcript API → Google Gemini API
 ```
 
-Spring Boot 僅作 BFF（Backend for Frontend）與快取，**不含任何 AI 邏輯**。
-media-service 是無狀態的 Flask 服務，負責字幕抓取與 Gemini 呼叫，可部署至 AWS Lambda（透過 Mangum）。
+Spring Boot 僅作 BFF（Backend for Frontend），**不含任何 AI 邏輯**。
+media-service 是無狀態的 Flask 服務，負責字幕抓取與 Gemini 呼叫。
 
 ---
 
@@ -25,11 +26,10 @@ media-service 是無狀態的 Flask 服務，負責字幕抓取與 Gemini 呼叫
 
 | 層級 | 技術 |
 |------|------|
-| 前端 | Thymeleaf（SSR） |
-| BFF | Java 17、Spring Boot 3.2.3、Caffeine Cache |
+| 前端 | Thymeleaf（SSR）、Vanilla JS |
+| BFF | Java 17、Spring Boot 3.2.3 |
 | media-service | Python 3、Flask、youtube-transcript-api、google-genai |
 | AI | Google Gemini 2.5 Flash |
-| 部署選項 | 本機執行 / AWS Lambda（Mangum） |
 
 ---
 
@@ -39,7 +39,7 @@ media-service 是無狀態的 Flask 服務，負責字幕抓取與 Gemini 呼叫
 
 - Java 17+、Maven
 - Python 3.9+
-- Google Gemini API 金鑰（[取得](https://aistudio.google.com/)）
+- Google Gemini API 金鑰（[取得](https://aistudio.google.com/apikey)）
 
 ### 1. 啟動 media-service（Python）
 
@@ -47,9 +47,20 @@ media-service 是無狀態的 Flask 服務，負責字幕抓取與 Gemini 呼叫
 cd media-service
 pip install -r requirements.txt
 
-export GEMINI_API_KEY=your_api_key_here   # Windows: set GEMINI_API_KEY=...
+# macOS / Linux
+export GEMINI_API_KEY=你的金鑰
+# Windows
+set GEMINI_API_KEY=你的金鑰
+
 python app.py
 # 服務跑在 http://localhost:5001
+```
+
+確認服務正常：
+
+```bash
+curl http://localhost:5001/health
+# {"gemini_ready": true, "status": "ok"}
 ```
 
 ### 2. 啟動 Spring Boot
@@ -72,6 +83,8 @@ mvn spring-boot:run
 |------|--------|------|
 | `GEMINI_API_KEY` | **必填** | Google Gemini API 金鑰 |
 | `GEMINI_MODEL` | `gemini-2.5-flash` | 使用的 Gemini 模型 |
+| `WEBSHARE_USERNAME` | （選填）| AWS 部署時繞過 YouTube 封鎖用的 Proxy 帳號 |
+| `WEBSHARE_PASSWORD` | （選填）| Proxy 密碼 |
 
 ### Spring Boot
 
@@ -85,6 +98,10 @@ mvn spring-boot:run
 
 ### Spring Boot（對外）
 
+#### `GET /`
+
+回傳 Thymeleaf 渲染的前端頁面。
+
 #### `POST /api/summarize`
 
 接收 YouTube 網址，回傳摘要。語言依瀏覽器的 `Accept-Language` 標頭自動判斷。
@@ -96,25 +113,34 @@ mvn spring-boot:run
 
 **Response 200**
 ```json
-{ "success": true, "summary": "• 重點一\n• 重點二\n..." }
+{ "success": true, "summary": "• 重點一\n• 重點二\n...", "errorMessage": null }
 ```
 
 **Error Response**
 ```json
-{ "success": false, "error": "錯誤訊息" }
+{ "success": false, "summary": null, "errorMessage": "錯誤訊息" }
 ```
 
 | HTTP 狀態碼 | 情境 |
 |-------------|------|
 | `200` | 成功 |
-| `400` | 未提供 URL |
+| `400` | 未提供 URL 或格式錯誤 |
 | `404` | 影片不存在或無法存取 |
 | `422` | 影片沒有可用字幕 |
-| `503` | media-service 連線失敗 |
+| `503` | media-service 連線失敗或 Gemini 錯誤 |
 
 ---
 
 ### media-service（內部）
+
+#### `GET /transcript?videoId={videoId}`
+
+抓取 YouTube 字幕並回傳純文字。
+
+**Response 200**
+```json
+{ "transcript": "字幕文字..." }
+```
 
 #### `POST /summarize`
 
@@ -130,40 +156,28 @@ mvn spring-boot:run
 { "summary": "• 重點一\n- 子項目\n• 重點二\n..." }
 ```
 
-#### `GET /transcript?videoId={videoId}`
+#### `GET /health`
 
-（Debug 用）直接取回原始字幕文字。
+確認服務狀態與 Gemini API Key 是否已設定。
 
 **Response 200**
 ```json
-{ "transcript": "字幕文字...", "language": "zh-TW" }
+{ "status": "ok", "gemini_ready": true }
 ```
 
 | HTTP 狀態碼 | 情境 |
 |-------------|------|
 | `200` | 成功 |
+| `400` | 缺少必要參數 |
 | `404` | 影片不存在 |
-| `422` | 無可用字幕（TranscriptsDisabled / NoTranscriptFound） |
-| `503` | 服務內部錯誤 |
-
----
-
-## 快取機制
-
-Spring Boot 使用 Caffeine Cache，分兩層獨立快取：
-
-| 快取名稱 | Cache Key | TTL | 最大筆數 |
-|----------|-----------|-----|---------|
-| `transcripts` | `videoId` | 1 小時 | 100 |
-| `summaries` | `videoId:language` | 1 小時 | 100 |
-
-相同影片在快取有效期內不會重複呼叫 YouTube 或 Gemini API。
+| `422` | 無可用字幕 |
+| `503` | Gemini API 錯誤 |
 
 ---
 
 ## 支援語言
 
-摘要語言依 `Accept-Language` 標頭自動選擇，目前對應：
+摘要語言依 `Accept-Language` 標頭自動選擇：
 
 | 語系代碼 | 輸出語言 |
 |----------|---------|
@@ -188,19 +202,19 @@ Spring Boot 使用 Caffeine Cache，分兩層獨立快取：
 youtube-summarizer/
 ├── media-service/
 │   ├── app.py                  # Flask 服務：字幕抓取 + Gemini 摘要
-│   └── requirements.txt
+│   └── requirements.txt        # 本機依賴（不含 serverless-wsgi）
 ├── src/main/java/com/example/youtubesummarizer/
 │   ├── controller/
-│   │   └── SummaryController.java   # 處理 POST /api/summarize
+│   │   ├── PageController.java      # GET  /  → Thymeleaf 頁面
+│   │   └── SummaryController.java   # POST /api/summarize
 │   ├── service/
-│   │   ├── MediaService.java        # BFF 客戶端：呼叫 media-service、管理快取
-│   │   └── YoutubeService.java      # 解析 YouTube URL → videoId
+│   │   └── MediaService.java        # 呼叫 Python /transcript + /summarize
 │   ├── config/
 │   │   ├── AppConfig.java           # RestTemplate Bean
-│   │   └── CacheConfig.java         # Caffeine 快取設定
+│   │   └── CorsConfig.java          # CORS 設定
 │   ├── model/
 │   │   ├── SummaryRequest.java      # { url }
-│   │   └── SummaryResponse.java     # { success, summary / error }
+│   │   └── SummaryResponse.java     # { success, summary, errorMessage }
 │   └── exception/
 │       ├── VideoNotFoundException.java
 │       ├── NoSubtitlesException.java
@@ -215,7 +229,7 @@ youtube-summarizer/
 
 ## 注意事項
 
-- 啟動 Spring Boot **之前**，media-service 必須先啟動
-- media-service 需要能存取 YouTube（部分地區可能需要 Proxy）
-- media-service 支援 AWS Lambda 部署（已整合 [Mangum](https://mangum.fastapiexpert.com/)），Lambda handler 為 `app.handler`
+- Spring Boot 啟動**之前**，media-service 必須先啟動
+- 本機測試不需要 Webshare Proxy；設定 `WEBSHARE_USERNAME` / `WEBSHARE_PASSWORD` 才會啟用
+- media-service 可選擇性部署至 AWS Lambda（需額外安裝 `serverless-wsgi`）
 - 字幕長度上限為 30,000 字元，超過部分會被截斷後再送給 Gemini

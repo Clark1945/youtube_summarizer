@@ -1,0 +1,26 @@
+# Java / Maven
+target/
+*.class
+*.jar
+
+# IntelliJ IDEA
+.idea/
+*.iml
+
+# AWS SAM build
+.aws-sam/
+media-service/.aws-sam/
+
+# Python
+media-service/venv/
+media-service/__pycache__/
+__pycache__/
+*.pyc
+*.pyo
+
+# Lambda deploy package (dependencies bundled for Lambda)
+lambda-deploy/
+
+# OS
+.DS_Store
+Thumbs.db

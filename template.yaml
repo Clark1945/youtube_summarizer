@@ -1,0 +1,36 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 1024
+
+Resources:
+  YoutubeSummarizerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: com.example.youtubesummarizer.StreamLambdaHandler::handleRequest
+      Runtime: java17
+      CodeUri: .
+      SnapStart:
+        ApplyOn: PublishedVersions
+      AutoPublishAlias: live
+      Environment:
+        Variables:
+          MEDIA_SERVICE_URL: https://thtm9dnrjh.execute-api.ap-northeast-1.amazonaws.com/Prod
+          ALLOWED_ORIGIN: "*"
+          JAVA_TOOL_OPTIONS: "-XX:+TieredCompilation -XX:TieredStopAtLevel=1"
+          GEMINI_API_KEY: "{{resolve:ssm:/youtube-summarizer/gemini-api-key}}"
+          GEMINI_MODEL: "gemini-2.5-flash"
+      Events:
+        ApiSummarize:
+          Type: Api
+          Properties:
+            Path: /api/summarize
+            Method: post
+
+Outputs:
+  SummarizeApi:
+    Description: API Gateway endpoint URL
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/api/summarize"
