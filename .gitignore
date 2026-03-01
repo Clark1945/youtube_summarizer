@@ -21,6 +21,10 @@ __pycache__/
 # Lambda deploy package (dependencies bundled for Lambda)
 lambda-deploy/
 
+# 環境變數（含 API Key，絕對不能推上 git）
+.env
+media-service/.env
+
 # OS
 .DS_Store
 Thumbs.db

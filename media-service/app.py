@@ -1,6 +1,9 @@
 import os
 import re
 import logging
+from dotenv import load_dotenv
+
+load_dotenv()  # 讀取 media-service/.env
 from flask import Flask, request, jsonify
 from youtube_transcript_api import (
     YouTubeTranscriptApi,
@@ -140,6 +143,7 @@ QUALITY STANDARDS:
 OUTPUT:
 Provide ONLY the formatted bullet-point summary.
 No introduction, no conclusion, no meta-commentary.
+Aim for a comprehensive summary of at least 500 words.
 
 {lang_instructions}
 
@@ -156,7 +160,7 @@ def _call_gemini(prompt: str) -> str:
         contents=prompt,
         config=types.GenerateContentConfig(
             temperature=0.3,
-            max_output_tokens=2048,
+            max_output_tokens=8192,
         ),
     )
     return response.text
