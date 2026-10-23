@@ -21,10 +21,10 @@ def _video_date(info: dict) -> datetime | None:
 def find_todays_stream() -> dict | None:
     """回傳今天（台灣時間）已結束的直播資訊；找不到則回傳 None。"""
     today = datetime.now(TZ).date()
-    with yt_dlp.YoutubeDL({"quiet": True, "extract_flat": True, "playlistend": 8}) as ydl:
+    with yt_dlp.YoutubeDL({"quiet": True, "noprogress": True, "extract_flat": True, "playlistend": 8}) as ydl:
         entries = ydl.extract_info(_streams_url(config.CHANNEL_URL), download=False).get("entries") or []
 
-    with yt_dlp.YoutubeDL({"quiet": True, "skip_download": True}) as ydl:
+    with yt_dlp.YoutubeDL({"quiet": True, "skip_download": True, "remote_components": ["ejs:github"]}) as ydl:
         for entry in entries:
             info = ydl.extract_info(entry["url"], download=False)
             if info.get("live_status") != "was_live":
@@ -44,6 +44,8 @@ def download_audio(video_id: str) -> Path:
     out = config.WORK_DIR / f"{video_id}.%(ext)s"
     opts = {
         "quiet": True,
+        "noprogress": True,
+        "remote_components": ["ejs:github"],
         "format": "bestaudio/best",
         "outtmpl": str(out),
         "postprocessors": [{"key": "FFmpegExtractAudio", "preferredcodec": "mp3", "preferredquality": "48"}],
