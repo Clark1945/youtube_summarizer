@@ -13,6 +13,14 @@ TIMEZONE_OFFSET_HOURS = 8  # 台灣時間
 CHANNEL_URL = os.getenv("CHANNEL_URL", "")
 TITLE_KEYWORD = os.getenv("TITLE_KEYWORD", "")
 
+POLL_SECONDS = 60
+# 直播中／剛結束時，最多等多久（分鐘）
+WAIT_PENDING_MINUTES = int(os.getenv("WAIT_PENDING_MINUTES", "60"))
+# 完全找不到今天的直播時，再多等多久才確定「今天沒直播」（分鐘）
+WAIT_NONE_MINUTES = int(os.getenv("WAIT_NONE_MINUTES", "10"))
+# 今天沒直播時是否仍通知你
+NOTIFY_NO_STREAM = os.getenv("NOTIFY_NO_STREAM", "true").lower() == "true"
+
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
 

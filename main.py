@@ -1,6 +1,7 @@
 import json
 import logging
 import sys
+import time
 
 from daily_digest import config, notify, summarize, youtube
 
@@ -17,16 +18,38 @@ def _save_done(done: set[str]) -> None:
     config.STATE_FILE.write_text(json.dumps(sorted(done)), encoding="utf-8")
 
 
+def _wait_for_stream() -> tuple[str, dict | None]:
+    """輪詢直到直播結束可下載；超過等待上限回傳 None。"""
+    start = time.monotonic()
+    while True:
+        status, info = youtube.find_todays_stream()
+        if status == youtube.READY:
+            return status, info
+        waited = (time.monotonic() - start) / 60
+        limit = config.WAIT_PENDING_MINUTES if status == youtube.PENDING else config.WAIT_NONE_MINUTES
+        if waited >= limit:
+            return status, None
+        log.info("狀態：%s，%d 秒後再查", "直播中/處理中" if status == youtube.PENDING else "尚未找到", config.POLL_SECONDS)
+        time.sleep(config.POLL_SECONDS)
+
+
 def main() -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     if not config.CHANNEL_URL or not config.GEMINI_API_KEY:
         log.error("請先在 .env 設定 CHANNEL_URL 與 GEMINI_API_KEY")
         return 1
 
-    info = youtube.find_todays_stream()
+    status, info = _wait_for_stream()
     if not info:
-        log.warning("今天找不到已結束的直播（可能尚未結束或今天沒開）")
-        return 2
+        if status == youtube.PENDING:
+            msg = f"直播等了 {config.WAIT_PENDING_MINUTES} 分鐘仍未結束，今天先不摘要。"
+        else:
+            msg = "今天沒有找到直播（可能休息或未開播），不需摘要。"
+        log.warning(msg)
+        if config.NOTIFY_NO_STREAM:
+            notify.send_telegram(msg)
+            notify.send_email("今日財經：今天沒有摘要", msg)
+        return 0
 
     vid, title = info["id"], info["title"]
     done = _load_done()
