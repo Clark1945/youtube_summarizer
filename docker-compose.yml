@@ -1,0 +1,8 @@
+services:
+  digest:
+    build: .
+    env_file: .env
+    volumes:
+      - ./data:/data
+    # 一次性任務：由主機 cron 以 `docker compose run --rm digest` 觸發
+    restart: "no"

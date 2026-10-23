@@ -5,6 +5,7 @@ import yt_dlp
 
 from . import config
 
+JS_RUNTIMES = {"deno": {}, "node": {}}  # 解 YouTube 的 JS 驗證，裝了哪個就用哪個
 TZ = timezone(timedelta(hours=config.TIMEZONE_OFFSET_HOURS))
 
 
@@ -33,7 +34,7 @@ def find_todays_stream() -> tuple[str, dict | None]:
         entries = ydl.extract_info(_streams_url(config.CHANNEL_URL), download=False).get("entries") or []
 
     pending = False
-    with yt_dlp.YoutubeDL({"quiet": True, "skip_download": True, "remote_components": ["ejs:github"]}) as ydl:
+    with yt_dlp.YoutubeDL({"quiet": True, "skip_download": True, "remote_components": ["ejs:github"], "js_runtimes": JS_RUNTIMES}) as ydl:
         for entry in entries:
             try:
                 info = ydl.extract_info(entry["url"], download=False)
@@ -64,7 +65,7 @@ def download_audio(video_id: str) -> Path:
     opts = {
         "quiet": True,
         "noprogress": True,
-        "remote_components": ["ejs:github"],
+        "remote_components": ["ejs:github"], "js_runtimes": JS_RUNTIMES,
         "format": "bestaudio/best",
         "outtmpl": str(out),
         "postprocessors": [{"key": "FFmpegExtractAudio", "preferredcodec": "mp3", "preferredquality": "48"}],

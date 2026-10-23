@@ -6,8 +6,9 @@ from dotenv import load_dotenv
 ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(ROOT / ".env")
 
-WORK_DIR = ROOT / "work"
-STATE_FILE = ROOT / "state.json"
+DATA_DIR = Path(os.getenv("DATA_DIR", ROOT))  # 部署時掛載成 volume，保存已處理紀錄
+WORK_DIR = DATA_DIR / "work"
+STATE_FILE = DATA_DIR / "state.json"
 TIMEZONE_OFFSET_HOURS = 8  # 台灣時間
 
 CHANNEL_URL = os.getenv("CHANNEL_URL", "")

@@ -5,3 +5,4 @@ work/
 state.json
 *.log
 .idea/
+data/

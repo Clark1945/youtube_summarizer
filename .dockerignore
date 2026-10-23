@@ -1,0 +1,10 @@
+.git
+.venv
+.env
+work
+data
+state.json
+*.log
+__pycache__
+.claude
+.idea
